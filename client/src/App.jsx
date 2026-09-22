@@ -3,9 +3,9 @@ import { AuthProvider } from "./components/auth/AuthContext";
 import Navbar from "./components/layout/Navbar";
 import Sell from "./pages/Sell";  // Make sure this matches your file name case
 import Footer from "./components/layout/Footer";
-import Home from "./pages/home";
+import Home from "./pages/Home";
 import Shop from "./pages/Shop";
-import Login from "./components/auth/login";
+import Login from "./components/auth/Login";
 import Cart from "./pages/cart";
 import MyListings from "./pages/MyListings";
 
