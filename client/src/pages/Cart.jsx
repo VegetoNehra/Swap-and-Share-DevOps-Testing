@@ -79,7 +79,7 @@ const Cart = () => {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     {/* Cart Items */}
-                    <div className="md:col-span-2">
+                    <div className="md:col-span-2  text-black">
                         {cartItems.map(item => (
                             <div key={item.cart_id} className="bg-white rounded-lg shadow mb-4 p-4">
                                 <div className="flex items-center">
@@ -90,11 +90,11 @@ const Cart = () => {
                                     />
                                     <div className="ml-4 flex-grow">
                                         <h3 className="text-lg font-semibold">{item.name}</h3>
-                                        <p className="text-gray-600">${item.price}</p>
+                                        <p className="text-gray-600">₹{item.price}</p>
                                         <div className="flex items-center mt-2">
                                             <button
                                                 onClick={() => updateQuantity(item.cart_id, Math.max(0, item.quantity - 1))}
-                                                className="bg-gray-200 px-3 py-1 rounded-l"
+                                                className="bg-blue-200 px-3 py-1 rounded-l"
                                             >
                                                 -
                                             </button>
@@ -103,13 +103,13 @@ const Cart = () => {
                                             </span>
                                             <button
                                                 onClick={() => updateQuantity(item.cart_id, item.quantity + 1)}
-                                                className="bg-gray-200 px-3 py-1 rounded-r"
+                                                className="bg-blue-200 px-3 py-1 rounded-r"
                                             >
                                                 +
                                             </button>
                                             <button
                                                 onClick={() => removeItem(item.cart_id)}
-                                                className="ml-4 text-red-600 hover:text-red-800"
+                                                className="ml-4 bg-blue-600 text-white hover:text-red-300"
                                             >
                                                 Remove
                                             </button>
@@ -117,7 +117,7 @@ const Cart = () => {
                                     </div>
                                     <div className="text-right">
                                         <p className="font-semibold">
-                                            ${(item.price * item.quantity).toFixed(2)}
+                                            ₹{(item.price * item.quantity).toFixed(2)}
                                         </p>
                                     </div>
                                 </div>
@@ -126,21 +126,21 @@ const Cart = () => {
                     </div>
 
                     {/* Cart Summary */}
-                    <div className="bg-white rounded-lg shadow p-4 h-fit">
+                    <div className="bg-black rounded-lg shadow  p-4 h-fit">
                         <h2 className="text-xl font-semibold mb-4">Order Summary</h2>
                         <div className="space-y-2">
                             <div className="flex justify-between">
                                 <span>Subtotal</span>
-                                <span>${calculateTotal()}</span>
+                                <span>₹{calculateTotal()}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span>Shipping</span>
-                                <span>$5.00</span>
+                                <span>₹150.00</span>
                             </div>
                             <div className="border-t pt-2 mt-2">
                                 <div className="flex justify-between font-semibold">
                                     <span>Total</span>
-                                    <span>${(parseFloat(calculateTotal()) + 5).toFixed(2)}</span>
+                                    <span>₹{(parseFloat(calculateTotal()) + 150).toFixed(2)}</span>
                                 </div>
                             </div>
                         </div>

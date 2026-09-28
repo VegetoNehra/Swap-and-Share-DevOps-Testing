@@ -106,8 +106,8 @@ const MyListings = () => {
                                 className="w-full h-48 object-cover"
                             />
                             <div className="p-4">
-                                <h3 className="text-lg font-semibold mb-2">{listing.name}</h3>
-                                <p className="text-gray-600 mb-2">${listing.price}</p>
+                                <h3 className="text-lg font-semibold mb-2 text-gray-600">{listing.name}</h3>
+                                <p className="text-gray-600 mb-2">₹{listing.price}</p>
                                 <p className="text-sm text-gray-500 mb-2">
                                     {listing.size} • {listing.condition}
                                 </p>

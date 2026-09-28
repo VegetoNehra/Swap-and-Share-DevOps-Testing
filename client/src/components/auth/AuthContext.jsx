@@ -29,16 +29,23 @@ export function AuthProvider({ children }) {
     };
 
     const logout = async () => {
-        try {
-            await axios.get('http://localhost:5000/auth/logout', {
-                withCredentials: true
-            });
-            setUser(null);
-            window.location.href = '/';
-        } catch (error) {
-            console.error('Error logging out:', error);
-        }
-    };
+    try {
+        await axios.post(
+            'http://localhost:5000/auth/logout',
+            {},
+            { withCredentials: true }
+        );
+
+        setUser(null);
+
+    } catch (error) {
+        console.error('Error logging out:', error);
+    }
+};
+
+
+    
+
 
     const value = {
         user,
@@ -49,7 +56,7 @@ export function AuthProvider({ children }) {
 
     return (
         <AuthContext.Provider value={value}>
-            {!loading && children}
+            { children}
         </AuthContext.Provider>
     );
 }

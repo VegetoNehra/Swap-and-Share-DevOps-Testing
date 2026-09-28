@@ -6,7 +6,7 @@ import Footer from "./components/layout/Footer";
 import Home from "./pages/Home";
 import Shop from "./pages/Shop";
 import Login from "./components/auth/Login";
-import Cart from "./pages/cart";
+import Cart from "./pages/Cart";
 import MyListings from "./pages/MyListings";
 
 function App() {

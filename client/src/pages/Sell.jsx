@@ -1,12 +1,12 @@
 // src/pages/sell.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../components/auth/AuthContext';
 
 const Sell = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -23,6 +23,21 @@ const Sell = () => {
         age_group: 'Adult',
         image_url: ''
     });
+
+    useEffect(() => {
+        if (!authLoading && !user) {
+            navigate('/login');
+        }
+    }, [user, authLoading, navigate]);
+
+    if (authLoading) {
+    return (
+        <div className="flex justify-center items-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+    );
+}
+
 
     const conditions = ['New', 'Like New', 'Good', 'Fair', 'Poor'];
     const categories = ['Clothing', 'Shoes', 'Accessories', 'Bags', 'Other'];
@@ -60,14 +75,6 @@ const Sell = () => {
         }
     };
 
-    if (!user) {
-        return (
-            <div className="text-center py-12">
-                <p className="text-gray-600">Please login to sell items.</p>
-            </div>
-        );
-    }
-
     return (
         <div className="max-w-2xl mx-auto p-6">
             <h2 className="text-2xl font-bold mb-6">List Your Item for Sale</h2>
@@ -79,7 +86,7 @@ const Sell = () => {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Basic Information */}
+
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         Item Name *
@@ -108,7 +115,6 @@ const Sell = () => {
                     />
                 </div>
 
-                {/* Price Information */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -139,7 +145,6 @@ const Sell = () => {
                     </div>
                 </div>
 
-                {/* Product Details */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -171,7 +176,6 @@ const Sell = () => {
                         </select>
                     </div>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -189,6 +193,7 @@ const Sell = () => {
                             ))}
                         </select>
                     </div>
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Category *
@@ -206,41 +211,42 @@ const Sell = () => {
                         </select>
                     </div>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Gender
-                        </label>
-                        <select
-                            name="gender"
-                            value={formData.gender}
-                            onChange={handleChange}
-                            className="w-full p-2 border rounded focus:ring-blue-500 focus:border-blue-500"
-                        >
-                            {genders.map(gender => (
-                                <option key={gender} value={gender}>{gender}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Age Group
-                        </label>
-                        <select
-                            name="age_group"
-                            value={formData.age_group}
-                            onChange={handleChange}
-                            className="w-full p-2 border rounded focus:ring-blue-500 focus:border-blue-500"
-                        >
-                            {ageGroups.map(age => (
-                                <option key={age} value={age}>{age}</option>
-                            ))}
-                        </select>
-                    </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Gender
+                    </label>
+                    <select
+                        name="gender"
+                        value={formData.gender}
+                        onChange={handleChange}
+                        className="w-full p-2 border rounded focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        {genders.map(gender => (
+                            <option key={gender} value={gender}>{gender}</option>
+                        ))}
+                    </select>
                 </div>
 
-                {/* Image URL */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Age Group
+                    </label>
+                    <select
+                        name="age_group"
+                        value={formData.age_group}
+                        onChange={handleChange}
+                        className="w-full p-2 border rounded focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        {ageGroups.map(age => (
+                            <option key={age} value={age}>{age}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+
+
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         Image URL *
@@ -256,7 +262,6 @@ const Sell = () => {
                     />
                 </div>
 
-                {/* Submit Button */}
                 <button
                     type="submit"
                     disabled={loading}

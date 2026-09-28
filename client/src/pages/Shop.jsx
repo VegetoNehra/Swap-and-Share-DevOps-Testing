@@ -92,8 +92,8 @@ const Shop = () => {
                                 }}
                             />
                             <div className="p-4">
-                                <h3 className="text-lg font-semibold">{product.name}</h3>
-                                <p className="text-gray-600">${product.price}</p>
+                                <h3 className="text-lg font-semibold text-gray-600">{product.name}</h3>
+                                <p className="text-gray-600">₹{product.price}</p>
                                 <p className="text-sm text-gray-500 mb-2">
                                     {product.size} • {product.condition}
                                 </p>
