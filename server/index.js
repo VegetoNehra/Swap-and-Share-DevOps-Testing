@@ -94,11 +94,19 @@ app.get('/auth/google/callback',
     })
 );
 
-app.get('/auth/logout', (req, res) => {
-    req.logout(() => {
-        res.redirect('http://localhost:5173');
+app.post('/auth/logout', (req, res) => {
+    req.logout(function (err) {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+
+        req.session.destroy(() => {
+            res.clearCookie('connect.sid');
+            res.status(200).json({ message: "Logged out successfully" });
+        });
     });
 });
+
 
 // Check if user is authenticated
 app.get('/auth/user', (req, res) => {
