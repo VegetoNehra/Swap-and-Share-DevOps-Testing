@@ -1,312 +1,120 @@
-const { By, until, Builder } = require("selenium-webdriver");
-const chrome = require("selenium-webdriver/chrome");
-const XLSX = require("xlsx");
-const fs = require("fs");
-const path = require("path");
+const {
+    until, APP_URL,
+    LOGOUT_BUTTON, LOGIN_LINK,
+    runCase, skipCase,
+    createDriver, apiRequest,
+} = require("./helpers/common");
 
-const excelFile = path.join(__dirname, "selenium_test_results.xlsx");
+const TESTS = {
+    logout: {
+        id: "TC-LOGOUT-001",
+        scenario: "Authenticated user logout",
+        expected: "User should be logged out, redirected to Home, and shown the Login option.",
+    },
+    session: {
+        id: "TC-LOGOUT-002",
+        scenario: "Verify session invalidation after logout",
+        expected: "Authenticated session should be destroyed and /auth/user should reject the request with 401.",
+    },
+    protectedApi: {
+        id: "TC-LOGOUT-003",
+        scenario: "Protected API rejects request after logout",
+        expected: "/api/cart should return 401 'Please log in first' once the session is destroyed.",
+    },
+    persist: {
+        id: "TC-LOGOUT-004",
+        scenario: "Logged-out state persists after page reload",
+        expected: "After reloading Home the Login link is shown and the Logout button is absent.",
+    },
+};
 
-function saveResult(testCaseId, scenario, expectedResult, actualResult, status) {
-
-    let workbook;
-    let worksheet;
-
-    // Open existing Excel file
-    if (fs.existsSync(excelFile)) {
-
-        workbook = XLSX.readFile(excelFile);
-
-        if (workbook.Sheets["Test Results"]) {
-            worksheet = workbook.Sheets["Test Results"];
-        } else {
-            worksheet = XLSX.utils.aoa_to_sheet([
-                [
-                    "Test Case ID",
-                    "Test Scenario",
-                    "Expected Result",
-                    "Actual Result",
-                    "Status",
-                    "Execution Date"
-                ]
-            ]);
-
-            XLSX.utils.book_append_sheet(
-                workbook,
-                worksheet,
-                "Test Results"
-            );
-        }
-
-    } else {
-
-        workbook = XLSX.utils.book_new();
-
-        worksheet = XLSX.utils.aoa_to_sheet([
-            [
-                "Test Case ID",
-                "Test Scenario",
-                "Expected Result",
-                "Actual Result",
-                "Status",
-                "Execution Date"
-            ]
-        ]);
-
-        XLSX.utils.book_append_sheet(
-            workbook,
-            worksheet,
-            "Test Results"
-        );
-    }
-
-
-    // Append new test result
-    XLSX.utils.sheet_add_aoa(
-        worksheet,
-        [[
-            testCaseId,
-            scenario,
-            expectedResult,
-            actualResult,
-            status,
-            new Date().toLocaleString()
-        ]],
-        {
-            origin: -1
-        }
-    );
-
-    XLSX.writeFile(workbook, excelFile);
-
-    console.log(`Excel report saved to: ${excelFile}`);
-}
-
-
-// ============================================================
-// CONNECT TO EXISTING OPERA
-// ============================================================
-
-async function createOperaDriver() {
-
-    const options = new chrome.Options();
-
-    // IMPORTANT:
-    // Change this path if your Opera executable is different.
-    options.setChromeBinaryPath("/usr/bin/opera");
-
-    // Connect to manually opened Opera
-    options.debuggerAddress("127.0.0.1:9222");
-
-    return await new Builder()
-        .forBrowser("chrome")
-        .setChromeOptions(options)
-        .build();
-}
-
-
-// ============================================================
-// LOGOUT TEST SUITE
-// ============================================================
-
-(async function logoutTest() {
-
-    const driver = await createOperaDriver();
+(async function logoutTests() {
+    const driver = await createDriver();
+    let allPassed = true;
 
     try {
+        console.log("\n=== LOGOUT TEST SUITE ===");
+        console.log("Precondition: an authenticated session must exist (run login.test.js first).");
 
-        console.log("");
-        console.log("======================================");
-        console.log("STARTING LOGOUT TEST SUITE");
-        console.log("======================================");
-
-
-        // ====================================================
         // TC-LOGOUT-001
-        // Verify authenticated user can logout
-        // ====================================================
+        const logoutOk = await runCase(TESTS.logout, async () => {
+            await driver.get(APP_URL);
 
-        console.log("");
-        console.log("TC-LOGOUT-001: User Logout");
+            let logoutButton;
+            try {
+                logoutButton = await driver.wait(until.elementLocated(LOGOUT_BUTTON), 10000);
+            } catch {
+                throw new Error("Precondition failed: no authenticated user (Logout button not found). Run login.test.js first.");
+            }
 
+            // Record the response of the app's own POST /auth/logout (axios uses XHR)
+            await driver.executeScript(function () {
+                window.__logoutResult = null;
+                const origOpen = XMLHttpRequest.prototype.open;
+                XMLHttpRequest.prototype.open = function (method, url) {
+                    if (String(url).includes("/auth/logout")) {
+                        this.addEventListener("loadend", () => {
+                            window.__logoutResult = { status: this.status, body: this.responseText };
+                        });
+                    }
+                    return origOpen.apply(this, arguments);
+                };
+            });
 
-        await driver.get("http://localhost:5173/");
+            await logoutButton.click();
+            console.log("  Logout button clicked.");
 
-        console.log("Opening Swap-and-Share home page...");
+            try {
+                await driver.wait(until.elementLocated(LOGIN_LINK), 10000);
+            } catch {
+                const req = await driver.executeScript("return window.__logoutResult;");
+                const srv = await apiRequest(driver, "GET", "/auth/user");
+                throw new Error(
+                    `Login link not displayed after logout. POST /auth/logout -> ${req ? `${req.status} ${req.body}` : "no response (request hung, was blocked, or never sent)"}; server session GET /auth/user -> ${srv.status}.`
+                );
+            }
+            await driver.wait(async () => (await driver.getCurrentUrl()) === `${APP_URL}/`, 10000, "Not on Home page after logout");
+            if ((await driver.findElements(LOGOUT_BUTTON)).length) throw new Error("Logout button is still visible after logout.");
 
+            return "User successfully logged out, was redirected to Home, and the Login option was displayed.";
+        });
+        allPassed = allPassed && logoutOk;
 
-        // Wait for Logout button
-        const logoutButton = await driver.wait(
-            until.elementLocated(
-                By.xpath("//button[normalize-space()='Logout']")
-            ),
-            10000
-        );
-
-
-        console.log("Authenticated user detected.");
-        console.log("Logout button found.");
-
-
-        // Click Logout
-        await logoutButton.click();
-
-        console.log("Logout button clicked.");
-
-
-        // Wait for redirect to Home
-        await driver.wait(
-            async () => {
-
-                const url = await driver.getCurrentUrl();
-
-                return url &&
-                    url === "http://localhost:5173/";
-
-            },
-            10000
-        );
-
-
-        console.log("User redirected to Home page.");
-
-
-        // Verify Login button appears
-        const loginButton = await driver.wait(
-            until.elementLocated(
-                By.xpath("//a[normalize-space()='Login']")
-            ),
-            10000
-        );
-
-
-        if (!loginButton) {
-
-            throw new Error(
-                "Login button was not displayed after logout."
-            );
-
+        if (!logoutOk) {
+            skipCase(TESTS.session, "TC-LOGOUT-001 failed");
+            skipCase(TESTS.protectedApi, "TC-LOGOUT-001 failed");
+            skipCase(TESTS.persist, "TC-LOGOUT-001 failed");
+            return;
         }
 
-
-        console.log("Login button displayed after logout.");
-
-
-        saveResult(
-            "TC-LOGOUT-001",
-            "Authenticated user logout",
-            "User should be logged out, redirected to Home, and shown the Login option.",
-            "User successfully logged out, was redirected to Home, and the Login option was displayed.",
-            "PASS"
-        );
-
-
-        console.log("TC-LOGOUT-001 PASSED");
-
-
-        // ====================================================
         // TC-LOGOUT-002
-        // Verify server-side session invalidation
-        // ====================================================
+        allPassed = (await runCase(TESTS.session, async () => {
+            const { status, body } = await apiRequest(driver, "GET", "/auth/user");
+            if (status !== 401) throw new Error(`Session may still be active. /auth/user returned ${status}: ${JSON.stringify(body)}`);
+            return `Logout destroyed the session. /auth/user returned 401 ${JSON.stringify(body)}.`;
+        })) && allPassed;
 
-        console.log("");
-        console.log("TC-LOGOUT-002: Session Invalidation");
+        // TC-LOGOUT-003
+        allPassed = (await runCase(TESTS.protectedApi, async () => {
+            const { status, body } = await apiRequest(driver, "GET", "/api/cart");
+            if (status !== 401) throw new Error(`/api/cart returned ${status}: ${JSON.stringify(body)} (expected 401).`);
+            return `/api/cart rejected the request with 401 ${JSON.stringify(body)}.`;
+        })) && allPassed;
 
-
-        await driver.get("http://localhost:5000/auth/user");
-
-
-        await driver.wait(
-            until.elementLocated(
-                By.tagName("body")
-            ),
-            5000
-        );
-
-
-        const response = await driver
-            .findElement(By.tagName("body"))
-            .getText();
-
-
-        console.log("Authentication API response:");
-        console.log(response);
-
-
-        if (
-            response.includes("Not authenticated") ||
-            response.includes("401")
-        ) {
-
-            console.log("Session successfully invalidated.");
-
-            saveResult(
-                "TC-LOGOUT-002",
-                "Verify session invalidation after logout",
-                "Authenticated session should be destroyed and /auth/user should reject the request.",
-                "Logout successfully destroyed the session. /auth/user returned Not authenticated.",
-                "PASS"
-            );
-
-            console.log("TC-LOGOUT-002 PASSED");
-
-        } else {
-
-            saveResult(
-                "TC-LOGOUT-002",
-                "Verify session invalidation after logout",
-                "Authenticated session should be destroyed and /auth/user should reject the request.",
-                `Session may still be active. /auth/user returned: ${response}`,
-                "FAIL"
-            );
-
-            throw new Error(
-                "User session is still authenticated after logout."
-            );
-        }
-
-
-        // ====================================================
-        // FINAL RESULT
-        // ====================================================
-
-        console.log("");
-        console.log("======================================");
-        console.log("GOOGLE LOGOUT TEST SUITE PASSED");
-        console.log("======================================");
-
+        // TC-LOGOUT-004
+        allPassed = (await runCase(TESTS.persist, async () => {
+            await driver.get(APP_URL);
+            await driver.navigate().refresh();
+            await driver.wait(until.elementLocated(LOGIN_LINK), 10000, "Login link not shown after reload");
+            if ((await driver.findElements(LOGOUT_BUTTON)).length) throw new Error("Logout button reappeared after reload.");
+            return "Login link displayed and Logout button absent after reload; user stayed logged out.";
+        })) && allPassed;
+    } catch (error) {
+        allPassed = false;
+        console.error("\n❌ LOGOUT SUITE ERROR:", error.message);
+    } finally {
+        // Don't quit: the driver is attached to your existing Opera session.
+        console.log(`\n${allPassed ? "✅ LOGOUT SUITE PASSED" : "❌ LOGOUT SUITE FAILED"}\nOpera left open.`);
+        process.exit(allPassed ? 0 : 1);
     }
-
-
-    catch (error) {
-
-        console.error("");
-        console.error("======================================");
-        console.error("LOGOUT TEST SUITE FAILED");
-        console.error("======================================");
-
-        console.error(error.message);
-
-
-        saveResult(
-            "TC-LOGOUT-ERROR",
-            "Logout test execution",
-            "Logout test suite should execute successfully.",
-            `Test execution failed: ${error.message}`,
-            "FAIL"
-        );
-
-    }
-
-
-    finally {
-
-        // IMPORTANT:
-        // Do NOT close Opera because Selenium
-        // is attached to the existing Opera session.
-
-        console.log("");
-        console.log("Opera left open.");
-
-    }
-
 })();

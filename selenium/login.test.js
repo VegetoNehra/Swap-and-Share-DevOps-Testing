@@ -1,367 +1,146 @@
-const { By, until, Builder } = require("selenium-webdriver");
-const chrome = require("selenium-webdriver/chrome");
-const XLSX = require("xlsx");
-const fs = require("fs");
-const path = require("path");
+const {
+    By, until, APP_URL,
+    LOGOUT_BUTTON, LOGIN_LINK,
+    runCase, skipCase,
+    createDriver, switchToWindow, apiRequest, ensureLoggedOut,
+} = require("./helpers/common");
 
-const excelFile = path.join(__dirname, "selenium_test_results.xlsx");
+const TESTS = {
+    oauth: {
+        id: "TC-LOGIN-001",
+        scenario: "Google OAuth Login",
+        expected: "User successfully logs in using Google and is redirected to Swap-and-Share",
+    },
+    navbar: {
+        id: "TC-LOGIN-002",
+        scenario: "Navbar reflects logged-in state",
+        expected: "After login the navbar shows the Logout button and hides the Login link.",
+    },
+    persist: {
+        id: "TC-LOGIN-003",
+        scenario: "Session persists after page reload",
+        expected: "After reloading the page the user is still logged in.",
+    },
+};
 
-
-// ============================================================
-// SAVE TEST RESULT TO EXCEL
-// ============================================================
-
-function saveResult(status, actualResult) {
-
-    let workbook;
-
-    // Open existing Excel file
-    if (fs.existsSync(excelFile)) {
-        workbook = XLSX.readFile(excelFile);
-    } else {
-        workbook = XLSX.utils.book_new();
+async function selectFirstGoogleAccount(driver) {
+    try {
+        const account = await driver.wait(until.elementLocated(By.css("[data-identifier], [data-email]")), 10000);
+        await driver.executeScript("arguments[0].scrollIntoView({block:'center'});", account);
+        await driver.wait(until.elementIsVisible(account), 5000);
+        await account.click();
+        console.log("  First Google account selected.");
+    } catch {
+        // Google sometimes skips the chooser (single session / auto-consent)
+        console.log("  No account chooser shown, continuing...");
     }
+}
 
-    let worksheet;
-
-    // Get existing Test Results sheet
-    if (workbook.Sheets["Test Results"]) {
-
-        worksheet = workbook.Sheets["Test Results"];
-
-    } else {
-
-        // Create sheet if it doesn't exist
-        worksheet = XLSX.utils.aoa_to_sheet([
-            [
-                "Test Case ID",
-                "Test Scenario",
-                "Expected Result",
-                "Actual Result",
-                "Status",
-                "Execution Date"
-            ],
-            [
-                "TC-LOGIN-001",
-                "Google OAuth Login",
-                "User successfully logs in using Google and is redirected to Swap-and-Share",
-                "",
-                "",
-                ""
-            ]
-        ]);
-
-        XLSX.utils.book_append_sheet(
-            workbook,
-            worksheet,
-            "Test Results"
+async function clickGoogleContinueIfShown(driver) {
+    try {
+        const btn = await driver.wait(
+            until.elementLocated(By.xpath("//button[normalize-space()='Continue' or .//span[normalize-space()='Continue']]")),
+            4000
         );
+        await btn.click();
+        console.log("  Google consent 'Continue' clicked.");
+    } catch {
+        // no consent screen, or page already redirected
     }
-
-
-    // ========================================================
-    // FIND TC-LOGIN-001
-    // ========================================================
-
-    const range = XLSX.utils.decode_range(worksheet["!ref"]);
-
-    let testCaseRow = -1;
-
-    for (let row = range.s.r + 1; row <= range.e.r; row++) {
-
-        const cell = worksheet[
-            XLSX.utils.encode_cell({
-                r: row,
-                c: 0
-            })
-        ];
-
-        if (cell && cell.v === "TC-LOGIN-001") {
-
-            testCaseRow = row;
-            break;
-        }
-    }
-
-
-    // ========================================================
-    // IF TEST CASE DOESN'T EXIST, CREATE IT
-    // ========================================================
-
-    if (testCaseRow === -1) {
-
-        testCaseRow = range.e.r + 1;
-
-        worksheet[
-            XLSX.utils.encode_cell({
-                r: testCaseRow,
-                c: 0
-            })
-        ] = {
-            t: "s",
-            v: "TC-LOGIN-001"
-        };
-
-        worksheet[
-            XLSX.utils.encode_cell({
-                r: testCaseRow,
-                c: 1
-            })
-        ] = {
-            t: "s",
-            v: "Google OAuth Login"
-        };
-
-        worksheet[
-            XLSX.utils.encode_cell({
-                r: testCaseRow,
-                c: 2
-            })
-        ] = {
-            t: "s",
-            v: "User successfully logs in using Google and is redirected to Swap-and-Share"
-        };
-
-    }
-
-
-    // ========================================================
-    // UPDATE ONLY THIS TEST CASE
-    // ========================================================
-
-    worksheet[
-        XLSX.utils.encode_cell({
-            r: testCaseRow,
-            c: 3
-        })
-    ] = {
-        t: "s",
-        v: actualResult
-    };
-
-
-    worksheet[
-        XLSX.utils.encode_cell({
-            r: testCaseRow,
-            c: 4
-        })
-    ] = {
-        t: "s",
-        v: status
-    };
-
-
-    worksheet[
-        XLSX.utils.encode_cell({
-            r: testCaseRow,
-            c: 5
-        })
-    ] = {
-        t: "s",
-        v: new Date().toLocaleString()
-    };
-
-
-    // Make sure Excel knows about the used range
-    worksheet["!ref"] = XLSX.utils.encode_range({
-        s: range.s,
-        e: {
-            r: Math.max(range.e.r, testCaseRow),
-            c: 5
-        }
-    });
-
-
-    // Save Excel
-    XLSX.writeFile(workbook, excelFile);
-
-    console.log(`Excel report saved to: ${excelFile}`);
 }
 
-
-// ============================================================
-// CONNECT TO EXISTING OPERA
-// ============================================================
-
-async function createOperaDriver() {
-
-    const options = new chrome.Options();
-
-    // Opera executable
-    options.setChromeBinaryPath("/usr/bin/opera");
-
-    // Connect to already-running Opera
-    options.debuggerAddress("127.0.0.1:9222");
-
-    return await new Builder()
-        .forBrowser("chrome")
-        .setChromeOptions(options)
-        .build();
-}
-
-
-// ============================================================
-// GOOGLE LOGIN TEST
-// ============================================================
-
-(async function googleLoginTest() {
-
-    const driver = await createOperaDriver();
+(async function loginTests() {
+    const driver = await createDriver();
+    let allPassed = true;
 
     try {
+        console.log("\n=== LOGIN TEST SUITE ===");
+        await ensureLoggedOut(driver);
 
-        console.log("Opening Swap-and-Share login page in Opera...");
+        // TC-LOGIN-001
+        const oauthOk = await runCase(TESTS.oauth, async () => {
+            await driver.get(`${APP_URL}/login`);
 
-        await driver.get("http://localhost:5173/login");
-
-
-        // ====================================================
-        // FIND GOOGLE LOGIN BUTTON
-        // ====================================================
-
-        const googleButton = await driver.wait(
-            until.elementLocated(
-                By.xpath("//button[contains(., 'Sign in with Google')]")
-            ),
-            10000
-        );
-
-        console.log("Google login button found.");
-
-
-        // ====================================================
-        // CLICK GOOGLE LOGIN
-        // ====================================================
-
-        await googleButton.click();
-
-        console.log("Google login clicked.");
-
-
-        // ====================================================
-        // WAIT FOR GOOGLE
-        // ====================================================
-
-        await driver.wait(
-            async () => {
-
-                const url = await driver.getCurrentUrl();
-
-                return url.includes("accounts.google.com");
-
-            },
-            15000
-        );
-
-        console.log("Google OAuth page opened.");
-
-        console.log("");
-        console.log("======================================");
-        console.log("Complete Google login in Opera.");
-        console.log("Waiting for redirect...");
-        console.log("======================================");
-        console.log("");
-
-
-        // ====================================================
-        // WAIT FOR REDIRECT
-        // ====================================================
-
-        await driver.wait(
-            async () => {
-
-                const url = await driver.getCurrentUrl();
-
-                return url.startsWith("http://localhost:5173");
-
-            },
-            120000
-        );
-
-        console.log("Successfully redirected to Swap-and-Share.");
-
-
-        // ====================================================
-        // VERIFY AUTHENTICATION
-        // ====================================================
-
-        await driver.get("http://localhost:5000/auth/user");
-
-        await driver.wait(
-            until.elementLocated(By.tagName("body")),
-            5000
-        );
-
-
-        const response = await driver
-            .findElement(By.tagName("body"))
-            .getText();
-
-        console.log("Authentication response:");
-        console.log(response);
-
-
-        // ====================================================
-        // LOGIN FAILED
-        // ====================================================
-
-        if (response.includes("Not authenticated")) {
-
-            saveResult(
-                "FAIL",
-                "Google OAuth completed but /auth/user returned Not authenticated."
+            const googleButton = await driver.wait(
+                until.elementLocated(By.xpath("//button[contains(., 'Sign in with Google')]")),
+                10000
             );
+            await driver.wait(until.elementIsVisible(googleButton), 5000);
+            await googleButton.click();
+            console.log("  Google login button clicked.");
 
-            throw new Error("User is not authenticated.");
+            // Google may show the chooser, or auto-approve and bounce straight back
+            // (already signed in + app already authorised). Accept either outcome.
+            const isGoogle = (url) => url.includes("accounts.google.com");
+            const isApp = (url) => {
+                try {
+                    const u = new URL(url);
+                    return u.origin === APP_URL && u.pathname !== "/login";
+                } catch {
+                    return false;
+                }
+            };
 
+            let outcome;
+            await driver.wait(async () => {
+                for (const handle of await driver.getAllWindowHandles()) {
+                    try {
+                        await driver.switchTo().window(handle);
+                        const url = await driver.getCurrentUrl();
+                        if (isGoogle(url)) { outcome = "google"; return true; }
+                        if (isApp(url)) { outcome = "app"; return true; }
+                    } catch {
+                        // window closed mid-check
+                    }
+                }
+                return false;
+            }, 30000, "Timed out: neither the Google page nor a redirect back to the app appeared after clicking sign-in");
+
+            if (outcome === "google") {
+                console.log("  Google OAuth page detected. Complete any password/2FA prompt manually if shown.");
+                await selectFirstGoogleAccount(driver);
+                await clickGoogleContinueIfShown(driver);
+                await switchToWindow(driver, isApp, 120000, "redirect to Swap-and-Share");
+            } else {
+                console.log("  Google auto-approved (already signed in); redirected straight back to the app.");
+            }
+
+            const { status, body } = await apiRequest(driver, "GET", "/auth/user");
+            if (status !== 200 || typeof body !== "object" || !Object.keys(body).length) {
+                throw new Error(`Google OAuth completed but /auth/user returned ${status} ${JSON.stringify(body)}.`);
+            }
+            return "Google authentication successful. First Google account was selected, user was redirected to Swap-and-Share, and /auth/user returned authenticated user data.";
+        });
+        allPassed = allPassed && oauthOk;
+
+        if (!oauthOk) {
+            skipCase(TESTS.navbar, "TC-LOGIN-001 failed");
+            skipCase(TESTS.persist, "TC-LOGIN-001 failed");
+            return;
         }
 
+        // TC-LOGIN-002
+        allPassed = (await runCase(TESTS.navbar, async () => {
+            await driver.get(APP_URL);
+            await driver.wait(until.elementLocated(LOGOUT_BUTTON), 10000, "Logout button not shown after login");
+            if ((await driver.findElements(LOGIN_LINK)).length) throw new Error("Login link is still visible after login.");
+            return "Logout button is displayed and the Login link is hidden after login.";
+        })) && allPassed;
 
-        // ====================================================
-        // LOGIN PASSED
-        // ====================================================
-
-        saveResult(
-            "PASS",
-            "Google authentication successful. User was redirected to Swap-and-Share and /auth/user returned authenticated user data."
-        );
-
-
-        console.log("");
-        console.log("======================================");
-        console.log("✅ GOOGLE LOGIN TEST PASSED");
-        console.log("======================================");
-
-
+        // TC-LOGIN-003
+        allPassed = (await runCase(TESTS.persist, async () => {
+            await driver.navigate().refresh();
+            await driver.wait(until.elementLocated(LOGOUT_BUTTON), 10000, "Logout button not shown after reload");
+            const { status } = await apiRequest(driver, "GET", "/auth/user");
+            if (status !== 200) throw new Error(`/auth/user returned ${status} after reload.`);
+            return "User remained logged in after reload; Logout button shown and /auth/user returned 200.";
+        })) && allPassed;
+    } catch (error) {
+        allPassed = false;
+        console.error("\n❌ LOGIN SUITE ERROR:", error.message);
+    } finally {
+        // Don't quit: the driver is attached to your existing Opera session.
+        console.log(`\n${allPassed ? "✅ LOGIN SUITE PASSED" : "❌ LOGIN SUITE FAILED"}\nOpera left open.`);
+        process.exit(allPassed ? 0 : 1);
     }
-
-    catch (error) {
-
-        console.error("");
-        console.error("❌ GOOGLE LOGIN TEST FAILED");
-        console.error(error.message);
-
-
-        // ====================================================
-        // SAVE FAILURE
-        // ====================================================
-
-        saveResult(
-            "FAIL",
-            `Test failed: ${error.message}`
-        );
-
-    }
-
-
-    finally {
-
-        // Do NOT close Opera because Selenium
-        // is attached to your existing Opera session.
-
-        console.log("Opera left open.");
-
-    }
-
 })();
-
