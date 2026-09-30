@@ -22,7 +22,6 @@ const TESTS = {
 
 };
 
-
 (async function productTests() {
 
     const driver = await createDriver();
@@ -31,7 +30,6 @@ const TESTS = {
     try {
 
         console.log("\n=== PRODUCT TEST SUITE ===");
-
 
         // ====================================================
         // TC-PRODUCT-001
@@ -44,16 +42,12 @@ const TESTS = {
 
                 await driver.get(`${APP_URL}/shop`);
 
-                await driver.wait(
-                    until.elementLocated(By.tagName("body")),
-                    10000
-                );
-
-                // Look for product cards/items on the Shop page.
-                // Adjust this selector if your product component
-                // uses a different class.
-                const products = await driver.findElements(
-                    By.css("[class*='product']")
+                const products = await driver.wait(
+                    until.elementsLocated(
+                        By.css("[data-testid='product-card']")
+                    ),
+                    10000,
+                    "No product cards were displayed on the Shop page."
                 );
 
                 if (products.length === 0) {
@@ -78,35 +72,55 @@ const TESTS = {
 
                 await driver.get(`${APP_URL}/shop`);
 
-                await driver.wait(
-                    until.elementLocated(By.tagName("body")),
-                    10000
-                );
-
-                const products = await driver.findElements(
-                    By.css("[class*='product']")
+                const products = await driver.wait(
+                    until.elementsLocated(
+                        By.css("[data-testid='product-card']")
+                    ),
+                    10000,
+                    "No product cards were displayed."
                 );
 
                 if (products.length === 0) {
                     throw new Error(
-                        "No product was available to verify."
+                        "No products were available to verify."
                     );
                 }
 
-                const firstProduct = products[0];
+                for (let i = 0; i < products.length; i++) {
 
-                const productText = await firstProduct.getText();
+                    const product = products[i];
 
-                if (!productText || productText.trim().length === 0) {
-                    throw new Error(
-                        "Product card does not contain any visible information."
+                    const name = await product.findElement(
+                        By.css("[data-testid='product-name']")
+                    );
+
+                    const price = await product.findElement(
+                        By.css("[data-testid='product-price']")
+                    );
+
+                    const nameText = (await name.getText()).trim();
+                    const priceText = (await price.getText()).trim();
+
+                    if (!nameText) {
+                        throw new Error(
+                            `Product ${i + 1} does not have a name.`
+                        );
+                    }
+
+                    if (!priceText || !priceText.startsWith("₹")) {
+                        throw new Error(
+                            `Product ${i + 1} does not have a valid price.`
+                        );
+                    }
+
+                    console.log(
+                        `  Product ${i + 1}: ${nameText} | ${priceText}`
                     );
                 }
 
-                return `Product information successfully displayed: "${productText.trim()}".`;
+                return `All ${products.length} product(s) contain valid names and prices.`;
             }
         )) && allPassed;
-
 
     } catch (error) {
 
