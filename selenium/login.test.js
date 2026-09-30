@@ -105,6 +105,24 @@ async function clickGoogleContinueIfShown(driver) {
                 console.log("  Google auto-approved (already signed in); redirected straight back to the app.");
             }
 
+            const cookies = await driver.manage().getCookies();
+
+            console.log("\n=== Browser Cookies After OAuth ===");
+
+            cookies.forEach(cookie => {
+                console.log(
+                    `  ${cookie.name} | ${cookie.domain} | ${cookie.path}`
+                );
+            });
+
+            const sessionCookie = cookies.find(cookie => cookie.name === "connect.sid");
+
+            if (sessionCookie) {
+                console.log("  ✅ connect.sid session cookie found.");
+            } else {
+                console.log("  ❌ connect.sid session cookie NOT found.");
+            }
+
             const { status, body } = await apiRequest(driver, "GET", "/auth/user");
             if (status !== 200 || typeof body !== "object" || !Object.keys(body).length) {
                 throw new Error(`Google OAuth completed but /auth/user returned ${status} ${JSON.stringify(body)}.`);
